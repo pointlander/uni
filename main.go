@@ -7,13 +7,13 @@ package main
 import (
 	"fmt"
 	"math/rand"
+	"os"
 
 	"github.com/pointlander/matrix"
 )
 
 func main() {
 	rng := rand.New(rand.NewSource(1))
-	input := matrix.NewMatrix(3, 1)
 	query := matrix.NewMatrix(3, 3)
 	key := matrix.NewMatrix(3, 3)
 	value := matrix.NewMatrix(3, 3)
@@ -21,22 +21,6 @@ func main() {
 		query.Data = append(query.Data, float32(rng.NormFloat64()))
 		key.Data = append(key.Data, float32(rng.NormFloat64()))
 		value.Data = append(value.Data, float32(rng.NormFloat64()))
-	}
-	for i := 0; i < input.Cols; i++ {
-		input.Data = append(input.Data, float32(rng.NormFloat64()))
-	}
-	for i := 0; i < 8; i++ {
-		output := matrix.SelfAttention(query.MulT(input), key.MulT(input), value.MulT(input))
-		newInput := matrix.NewMatrix(input.Cols, input.Rows+output.Rows)
-		newInput.Data = append(newInput.Data, input.Data...)
-		newInput.Data = append(newInput.Data, output.Data...)
-		input = newInput
-	}
-	for i := 0; i < input.Rows; i++ {
-		for j := 0; j < input.Cols; j++ {
-			fmt.Printf("%f ", input.Data[i*input.Cols+j])
-		}
-		fmt.Println()
 	}
 
 	rng1 := matrix.Rand(1)
@@ -71,8 +55,38 @@ func main() {
 			samples[i].Cost = -float64(variance)
 		}
 	}, matrix.NewCoord(3, 1))
+	var sample matrix.Sample
 	for i := 0; i < 33; i++ {
-		sample := optimizer.Iterate()
+		sample = optimizer.Iterate()
 		fmt.Println(i, sample.Cost)
+	}
+
+	x1 := sample.Vars[0][0].Sample()
+	y1 := sample.Vars[0][1].Sample()
+	z1 := sample.Vars[0][2].Sample()
+	w1 := x1.Add(y1.H(z1))
+	input := matrix.NewZeroMatrix(3, 1)
+	for i := range input.Data {
+		input.Data[i] = w1.Data[i]
+	}
+
+	for i := 0; i < 8; i++ {
+		output := matrix.SelfAttention(query.MulT(input), key.MulT(input), value.MulT(input))
+		newInput := matrix.NewMatrix(input.Cols, input.Rows+output.Rows)
+		newInput.Data = append(newInput.Data, input.Data...)
+		newInput.Data = append(newInput.Data, output.Data...)
+		input = newInput
+	}
+
+	out, err := os.Create("output.plt")
+	if err != nil {
+		panic(err)
+	}
+	defer out.Close()
+	for i := 0; i < input.Rows; i++ {
+		for j := 0; j < input.Cols; j++ {
+			fmt.Fprintf(out, "%f ", input.Data[i*input.Cols+j])
+		}
+		fmt.Fprintln(out)
 	}
 }
